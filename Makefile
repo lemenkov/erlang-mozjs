@@ -1,30 +1,35 @@
-# This is a stub Makefile that invokes GNU make which will read the GNUmakefile
-# instead of this file. This provides compatability on systems where GNU make is
-# not the system 'make' (eg. most non-linux UNIXes).
+# SPDX-FileCopyrightText: 2020-2026 Peter Lemenkov <lemenkov@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
 
-REBAR ?= $(shell which rebar 2>/dev/null || which ./rebar)
+REBAR ?= $(shell which rebar3 2>/dev/null || echo ./rebar3)
+
+.PHONY: all compile test clean dialyzer xref fmt check-fmt docs
 
 all: compile
 
 compile:
 	$(REBAR) compile
 
-compile_verbose:
-	$(REBAR) compile verbose=1
-
-check: test
 test: all
-	$(REBAR) eunit skip_deps=true
+	$(REBAR) eunit
 
-check_verbose: test_verbose
-test_verbose: all
-	$(REBAR) eunit -v skip_deps=true
+dialyzer:
+	$(REBAR) dialyzer
+
+xref:
+	$(REBAR) xref
+
+fmt:
+	$(REBAR) fmt
+
+check-fmt:
+	$(REBAR) fmt --check
 
 docs:
-	$(REBAR) doc
-
-deps:
-	$(REBAR) get-deps
+	$(REBAR) edoc
 
 clean:
 	$(REBAR) clean
+	rm -rf _build
+
+check: test dialyzer xref check-fmt
