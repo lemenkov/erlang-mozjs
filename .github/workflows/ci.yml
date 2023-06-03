@@ -1,0 +1,116 @@
+# SPDX-FileCopyrightText: 2024-2026 Peter Lemenkov <lemenkov@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: "Fedora ${{ matrix.fedora }} / mozjs${{ matrix.mozjs }} / OTP ${{ matrix.otp }}"
+    runs-on: ubuntu-latest
+    container:
+      image: "fedora:${{ matrix.fedora }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fedora: "41"
+            mozjs: "115"
+            otp: "26"
+          - fedora: "42"
+            mozjs: "115"
+            otp: "26"
+          - fedora: "43"
+            mozjs: "128"
+            otp: "26"
+          - fedora: "rawhide"
+            mozjs: "140"
+            otp: "26"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            erlang-jsx \
+            erlang-rebar3 \
+            erlang-rebar3-pc \
+            erlang-dialyzer \
+            erlang-eunit \
+            gcc-c++ \
+            git \
+            make \
+            mozjs${{ matrix.mozjs }}-devel \
+            pkg-config \
+            which
+
+      - name: Compile
+        run: make compile
+
+      - name: Run tests
+        run: make test
+
+      - name: Dialyzer
+        run: make dialyzer
+        continue-on-error: true
+
+      - name: Xref
+        run: make xref
+
+  lint:
+    name: "Lint & Format"
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            clang-tools-extra \
+            cppcheck \
+            erlang-jsx \
+            erlang-rebar3 \
+            erlang-rebar3-pc \
+            gcc-c++ \
+            make \
+            mozjs128-devel \
+            pkg-config \
+            python3-pip \
+            which
+
+      - name: Check Erlang formatting
+        run: make check-fmt
+        continue-on-error: true
+
+      - name: Check C++ with cppcheck
+        run: |
+          cppcheck \
+            --enable=warning,style,performance,portability \
+            --suppress=missingIncludeSystem \
+            --error-exitcode=1 \
+            --std=c++17 \
+            c_src/
+
+      - name: Check C++ formatting
+        run: |
+          find c_src -name '*.cpp' -o -name '*.h' | \
+            xargs clang-format --dry-run --Werror
+        continue-on-error: true
+
+  reuse:
+    name: "REUSE Compliance"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: REUSE Compliance Check
+        uses: fsfe/reuse-action@v4
