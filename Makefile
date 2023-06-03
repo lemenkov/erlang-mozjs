@@ -2,7 +2,7 @@
 # instead of this file. This provides compatability on systems where GNU make is
 # not the system 'make' (eg. most non-linux UNIXes).
 
-REBAR ?= $(shell which rebar 2>/dev/null || which ./rebar)
+REBAR ?= $(shell which rebar3 2>/dev/null || which ./rebar)
 
 all: compile
 
