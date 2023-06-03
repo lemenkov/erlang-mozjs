@@ -11,7 +11,7 @@ basic_define_test_() ->
 			{"define as list", ?_assertEqual(ok, js_driver:define_js(Handle, "var b = 100;function constant_mult2(x) { return x * b; }"))},
 			{"define as binary witn filename", ?_assertEqual(ok, js_driver:define_js(Handle, {<<"erltest1.js">>, <<"var c = 100;function constant_mult3(x) { return x * c; }">>}))},
 			{"define as list with filename", ?_assertEqual(ok, js_driver:define_js(Handle, {<<"erltest2.js">>, "var d = 100;function constant_mult4(x) { return x * d; }"}))},
-			{"define from file", ?_assertEqual(ok, js_driver:define_js(Handle, {file, "../test/erltest3.js"}))}
+			{"define from file", ?_assertEqual(ok, js_driver:define_js(Handle, {file, "./test/erltest3.js"}))}
 		] end
       }.
 
