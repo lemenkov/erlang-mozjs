@@ -29,8 +29,11 @@ void on_error(JSContext* context, JSErrorReport* report)
     {
         spidermonkey_state* state =
             (spidermonkey_state*)JS_GetContextPrivate(context);
+        /* report->linebuf() returns const char16_t* in mozjs 115+;
+           casting to (char*) is undefined behaviour.  Use a safe
+           placeholder instead. */
         state->replace_error(report->message().c_str(), report->lineno,
-                             (char*)(report->linebuf()));
+                             "<source unavailable>");
         JS_SetContextPrivate(context, state);
     }
 }
@@ -70,17 +73,33 @@ bool js_log(JSContext* cx, unsigned argc, JS::Value* vp)
     }
     else
     {
-        auto file_str = JS::ToString(cx, args[0]);
-        size_t file_size = JS_GetStringLength(file_str);
-        char* filename = (char*)malloc(file_size + 1);
-        file_size = JS_EncodeStringToBuffer(cx, file_str, filename, file_size + 1);
+        JS::RootedString file_str(cx, JS::ToString(cx, args[0]));
+        if (!file_str)
+        {
+            args.rval().setBoolean(false);
+            return true;
+        }
+        JS::UniqueChars filename(JS_EncodeStringToUTF8(cx, file_str));
+        if (!filename)
+        {
+            args.rval().setBoolean(false);
+            return true;
+        }
 
-        auto out_str = JS::ToString(cx, args[1]);
-        size_t out_size = JS_GetStringLength(out_str);
-        char* output = (char*)malloc(out_size + 1);
-        out_size = JS_EncodeStringToBuffer(cx, out_str, output, out_size + 1);
+        JS::RootedString out_str(cx, JS::ToString(cx, args[1]));
+        if (!out_str)
+        {
+            args.rval().setBoolean(false);
+            return true;
+        }
+        JS::UniqueChars output(JS_EncodeStringToUTF8(cx, out_str));
+        if (!output)
+        {
+            args.rval().setBoolean(false);
+            return true;
+        }
 
-        FILE* fd = fopen(filename, "a+");
+        FILE* fd = fopen(filename.get(), "a+");
         if (fd)
         {
             struct tm* tmp;
@@ -91,7 +110,7 @@ bool js_log(JSContext* cx, unsigned argc, JS::Value* vp)
             fprintf(fd, "%02d/%02d/%04d (%02d:%02d:%02d): ", tmp->tm_mon + 1, tmp->tm_mday,
                     tmp->tm_year + 1900, tmp->tm_hour, tmp->tm_min, tmp->tm_sec);
 
-            fwrite(output, 1, strlen(output), fd);
+            fwrite(output.get(), 1, strlen(output.get()), fd);
             fwrite("\n", 1, 1, fd);
             fclose(fd);
 
@@ -101,8 +120,6 @@ bool js_log(JSContext* cx, unsigned argc, JS::Value* vp)
         {
             args.rval().setBoolean(false);
         }
-        free(filename);
-        free(output);
     }
     return true;
 }
@@ -234,23 +251,44 @@ bool spidermonkey_vm::sm_eval(const char* filename, size_t filename_length, cons
 
     JS::RootedScript script(this->context, JS::Compile(this->context, options, source));
     if (!script)
-        this->check_js_exception();
-    spidermonkey_state* state = (spidermonkey_state*)JS_GetContextPrivate(this->context);
-    if (state->error)
     {
+        this->check_js_exception();
+        spidermonkey_state* state = (spidermonkey_state*)JS_GetContextPrivate(this->context);
+        if (!state->error)
+        {
+            /* check_js_exception didn't capture a structured error.
+               In some SpiderMonkey versions, compile errors are reported
+               via the WarningReporter callback without setting a pending
+               exception.  Synthesize a fallback. */
+            state->replace_error("compilation failed", 0, "<unknown>");
+        }
         *output = state->error_to_json();
-        JS_SetContextPrivate(this->context, state);
         return false;
     }
 
+    spidermonkey_state* state = (spidermonkey_state*)JS_GetContextPrivate(this->context);
+
     JS::RootedValue result(this->context);
-    if (!JS_ExecuteScript(this->context, script, &result))
+    bool exec_ok = JS_ExecuteScript(this->context, script, &result);
+    if (!exec_ok)
         this->check_js_exception();
     state = (spidermonkey_state*)JS_GetContextPrivate(this->context);
     if (state->error)
     {
         *output = state->error_to_json();
-        JS_SetContextPrivate(this->context, state);
+        return false;
+    }
+
+    /* If execution failed but check_js_exception didn't capture a
+       structured error, synthesize a fallback — don't fall through
+       to the success path with an undefined result value.
+       Exception: if the script was interrupted via sm_stop(), let it
+       fall through so handle_retval produces "undefined" which the
+       Erlang side maps to {error, mozjs_script_interrupted}. */
+    if (!exec_ok && !state->terminate)
+    {
+        state->replace_error("script execution failed", 0, "<unknown>");
+        *output = state->error_to_json();
         return false;
     }
 
@@ -272,9 +310,38 @@ void spidermonkey_vm::check_js_exception()
     {
         JS::RootedValue exception_v(this->context);
         JS_GetPendingException(this->context, &exception_v);
-        JS::RootedObject exception(this->context, &exception_v.toObject());
-        JSErrorReport* report = JS_ErrorFromException(this->context, exception);
-        on_error(this->context, report);
         JS_ClearPendingException(this->context);
+
+        if (exception_v.isObject())
+        {
+            JS::RootedObject exception(this->context, &exception_v.toObject());
+            JSErrorReport* report = JS_ErrorFromException(this->context, exception);
+            if (report)
+            {
+                spidermonkey_state* state =
+                    (spidermonkey_state*)JS_GetContextPrivate(this->context);
+                state->replace_error(report->message().c_str(), report->lineno,
+                                     "<exception>");
+                JS_SetContextPrivate(this->context, state);
+                return;
+            }
+        }
+
+        /* Exception is not a standard Error object (e.g. throw("string"))
+           or JS_ErrorFromException returned null (user-created Error).
+           Stringify the exception value — safe now that we cleared the
+           pending exception above. */
+        JS::RootedString str(this->context, JS::ToString(this->context, exception_v));
+        if (str)
+        {
+            JS::UniqueChars buf(JS_EncodeStringToUTF8(this->context, str));
+            if (buf)
+            {
+                spidermonkey_state* state =
+                    (spidermonkey_state*)JS_GetContextPrivate(this->context);
+                state->replace_error(buf.get(), 0, "<thrown>");
+                JS_SetContextPrivate(this->context, state);
+            }
+        }
     }
 }

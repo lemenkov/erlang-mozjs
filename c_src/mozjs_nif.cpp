@@ -89,6 +89,10 @@ static ERL_NIF_TERM mozjs_eval(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
             return enif_make_tuple2(env, atom_error, enif_make_binary(env, &result));
     }
 
+    if (!retval)
+        return enif_make_tuple2(env, atom_error,
+                                enif_make_atom(env, "unknown_error"));
+
     return atom_ok;
 }
 

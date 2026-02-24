@@ -55,7 +55,7 @@ call(Ctx, FunctionName, Args, Bindings) ->
         FunctionName,
         <<" === undefined) { throw(\"">>,
         EscapedFunctionName,
-        <<"\" not defined\"); } ">>,
+        <<" not defined\"); } ">>,
         <<"return ">>,
         FunctionName,
         <<"(">>,
