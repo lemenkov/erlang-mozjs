@@ -171,7 +171,11 @@ static void on_unload(ErlNifEnv* env, void* priv_data)
 {
     (void)env;
     (void)priv_data;
-    JS_ShutDown();
+    /* JS_ShutDown() intentionally omitted.  JS_Init() registers its own
+       atexit handler for final cleanup.  Calling JS_ShutDown() here races
+       with that handler during BEAM VM exit, causing a segfault in
+       SpiderMonkey's mutex teardown. The OS reclaims all resources at
+       process exit. */
 }
 
 static int on_upgrade(ErlNifEnv* env, void** priv, void** old_priv, ERL_NIF_TERM load_info)
