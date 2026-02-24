@@ -189,7 +189,7 @@ error_test_() ->
                 {"Bad syntax",
                     ?_assert(
                         verify_error(
-                            js:define(Handle, <<"functoin foo(x, y) { return true; };">>)
+                            js:define(Handle, <<"function foo(x, y { return true; };">>)
                         )
                     )},
 
