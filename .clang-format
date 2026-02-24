@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2024-2026 Peter Lemenkov <lemenkov@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 100
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+SortIncludes: true
+PointerAlignment: Left
+SpaceAfterCStyleCast: false
+Standard: c++17
