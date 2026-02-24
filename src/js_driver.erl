@@ -18,19 +18,17 @@
 -export([new/0, new/2, new/3, destroy/1]).
 -export([define_js/2, define_js/3, eval_js/2, eval_js/3]).
 
-%% @doc Create a new Javascript VM instance and preload Douglas Crockford's
-%% json2 converter. Uses a default heap size of 8MB and a default thread
-%% stack size of 16MB.
+%% @doc Create a new Javascript VM instance. Uses a default heap size of 8MB
+%% and a default thread stack size of 16MB.
 -spec new() -> {ok, reference()} | {error, atom()} | {error, any()}.
 new() ->
     new(?DEFAULT_THREAD_STACK, ?DEFAULT_HEAP_SIZE).
 
-%% @doc Create a new Javascript VM instance and preload Douglas Crockford's
-%% json2 converter.
+%% @doc Create a new Javascript VM instance with the given stack and heap sizes.
 -spec new(pos_integer(), pos_integer()) -> {ok, reference()} | {error, atom()} | {error, any()}.
 new(ThreadStackSize, HeapSize) ->
-    Initializer = fun(X) -> define_js(X, <<"json2.js">>) end,
-    new(ThreadStackSize, HeapSize, Initializer).
+    {ok, Port} = mozjs_nif:sm_init(ThreadStackSize, HeapSize),
+    {ok, Port}.
 
 %% @doc Create a new Javascript VM instance. The function arguments control
 %% how the VM instance is initialized. User supplied initializers must
