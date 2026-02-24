@@ -1,21 +1,12 @@
 %% @author Kevin Smith <ksmith@basho.com>
 %% @copyright 2009-2010 Basho Technologies
 %%
-%%    Licensed under the Apache License, Version 2.0 (the "License");
-%%    you may not use this file except in compliance with the License.
-%%    You may obtain a copy of the License at
-%%
-%%        http://www.apache.org/licenses/LICENSE-2.0
-%%
-%%    Unless required by applicable law or agreed to in writing, software
-%%    distributed under the License is distributed on an "AS IS" BASIS,
-%%    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%%    See the License for the specific language governing permissions and
-%%    limitations under the License.
+%% SPDX-FileCopyrightText: 2009-2010 Basho Technologies
+%% SPDX-FileCopyrightText: 2020-2026 Peter Lemenkov <lemenkov@gmail.com>
+%% SPDX-License-Identifier: Apache-2.0
 
 %% @doc This module manages all of the low-level details surrounding the
-%% linked-in driver. It is reponsible for loading and unloading the driver
-%% as needed. This module is also reponsible for creating and destroying
+%% NIF library. It is responsible for creating and destroying
 %% instances of Javascript VMs.
 
 -module(js_driver).
@@ -27,25 +18,23 @@
 -export([new/0, new/2, new/3, destroy/1]).
 -export([define_js/2, define_js/3, eval_js/2, eval_js/3]).
 
-%% @spec new() -> {ok, reference()} | {error, atom()} | {error, any()}
-%% @doc Create a new Javascript VM instance and preload Douglas Crockford's
-%% json2 converter (http://www.json.org/js.html). Uses a default heap
-%% size of 8MB and a default thread stack size of 8KB.
+%% @doc Create a new Javascript VM instance. Uses a default heap size of 8MB
+%% and a default thread stack size of 16MB.
+-spec new() -> {ok, reference()} | {error, atom()} | {error, any()}.
 new() ->
     new(?DEFAULT_THREAD_STACK, ?DEFAULT_HEAP_SIZE).
 
-%% @spec new(ThreadStackSize::int(), HeapSize::int()) -> {ok, reference()} | {error, atom()} | {error, any()}
-%% @doc Create a new Javascript VM instance and preload Douglas Crockford's
-%% json2 converter (http://www.json.org/js.html)
+%% @doc Create a new Javascript VM instance with the given stack and heap sizes.
+-spec new(pos_integer(), pos_integer()) -> {ok, reference()} | {error, atom()} | {error, any()}.
 new(ThreadStackSize, HeapSize) ->
-    Initializer = fun(X) -> define_js(X, <<"json2.js">>) end,
-    %Initializer = fun(X) -> define_js(X, {file, filename:join([priv_dir(), "json2.js"])}) end,
-    new(ThreadStackSize, HeapSize, Initializer).
+    {ok, Port} = mozjs_nif:sm_init(ThreadStackSize, HeapSize),
+    {ok, Port}.
 
-%% @type init_fun() = function(reference())
-%% @spec new(int(), int(), init_fun() | {ModName::atom(), FunName::atom()}) -> {ok, reference()} | {error, atom()} | {error, any()}
-%% @doc Create a new Javascript VM instance. The function arguments control how the VM instance is initialized.
-%% User supplied initializers must return true or false.
+%% @doc Create a new Javascript VM instance. The function arguments control
+%% how the VM instance is initialized. User supplied initializers must
+%% return true or false.
+-spec new(pos_integer(), pos_integer(), function() | {atom(), atom()}) ->
+    {ok, reference()} | {error, atom()} | {error, any()}.
 new(ThreadStackSize, HeapSize, Initializer) when is_function(Initializer) ->
     {ok, Port} = mozjs_nif:sm_init(ThreadStackSize, HeapSize),
     case Initializer(Port) of
@@ -60,36 +49,32 @@ new(ThreadStackSize, HeapSize, {InitMod, InitFun}) ->
     Initializer = fun(X) -> InitMod:InitFun(X) end,
     new(ThreadStackSize, HeapSize, Initializer).
 
-%% @spec destroy(reference()) -> ok
-%% @doc Destroys a Javascript VM instance
+%% @doc Destroys a Javascript VM instance.
+-spec destroy(reference()) -> ok.
 destroy(Ctx) ->
     mozjs_nif:sm_stop(Ctx).
 
-%% @type jsfilename() = list() | binary()
-%% @type jscontents() = list() | binary()
-%% @type jssrc() = {file, jsfilename()} | {jsfilename(), jscontents()} | jscontents()
-%% @spec define_js(reference(), jssrc()) -> ok | {error, any()}
-%% @doc Define a Javascript expression:
-%% js_driver:define_js(Ctx, &lt;&lt;"var x = 100;"&gt;&gt;).
+%% @doc Define a Javascript expression.
+-spec define_js(reference(), binary() | {binary(), binary()} | {file, string()}) ->
+    ok | {error, any()}.
 define_js(Ctx, JsSrc) ->
     exec_js(Ctx, JsSrc, no_jsonify, 0, ?DEFAULT_TIMEOUT).
 
-%% @spec define_js(reference(), jssrc(), integer()) -> ok | {error, any()}
-%% @doc Define a Javascript expression:
-%% js_driver:define_js(Ctx, &lt;&lt;"var blah = new Wubba();"&gt;&gt;).
-%% Note: Filename is used only as a label for error reporting.
+%% @doc Define a Javascript expression with a timeout.
+-spec define_js(reference(), binary() | {binary(), binary()} | {file, string()}, timeout()) ->
+    ok | {error, any()}.
 define_js(Ctx, JsSrc, Timeout) ->
     exec_js(Ctx, JsSrc, no_jsonify, 0, Timeout).
 
-%% @spec eval_js(reference(), jssrc()) -> {ok, any()} | {error, any()}
-%% @doc Evaluate a Javascript expression and return the result
-%% Note: Filename is used only as a label for error reporting.
+%% @doc Evaluate a Javascript expression and return the result.
+-spec eval_js(reference(), binary() | {binary(), binary()} | {file, string()}) ->
+    {ok, any()} | {error, any()}.
 eval_js(Ctx, JsSrc) ->
     exec_js(Ctx, JsSrc, jsonify, 1, ?DEFAULT_TIMEOUT).
 
-%% @spec eval_js(reference(), jssrc(), integer()) -> {ok, any()} | {error, any()}
-%% @doc Evaluate a Javascript expression and return the result
-%% Note: Filename is used only as a label for error reporting.
+%% @doc Evaluate a Javascript expression with a timeout and return the result.
+-spec eval_js(reference(), binary() | {binary(), binary()} | {file, string()}, timeout()) ->
+    {ok, any()} | {error, any()}.
 eval_js(Ctx, JsSrc, Timeout) ->
     exec_js(Ctx, JsSrc, jsonify, 1, Timeout).
 
@@ -97,7 +82,8 @@ eval_js(Ctx, JsSrc, Timeout) ->
 %% @private
 jsonify(Code) when is_binary(Code) ->
     {Body, <<LastChar:8>>} = split_binary(Code, size(Code) - 1),
-    C = case LastChar of
+    C =
+        case LastChar of
             $; ->
                 Body;
             _ ->
@@ -116,17 +102,19 @@ exec_js(Ctx, Js, Jsonify, HandleRetval, Timeout) ->
 
 exec_js(Ctx, FileName, Js, jsonify, HandleRetval, Timeout) ->
     exec_js(Ctx, FileName, jsonify(Js), no_jsonify, HandleRetval, Timeout);
-exec_js(Ctx, FileName, Js, _Jsonify, HandleRetval, Timeout) when is_binary(FileName), is_binary(Js) ->
+exec_js(Ctx, FileName, Js, _Jsonify, HandleRetval, Timeout) when
+    is_binary(FileName), is_binary(Js)
+->
     case mozjs_nif:sm_eval(Ctx, FileName, Js, HandleRetval, Timeout) of
         ok ->
             ok;
-	{ok, <<"undefined">>} ->
+        {ok, <<"undefined">>} ->
             {error, mozjs_script_interrupted};
         {ok, Result} ->
-            {ok, mochijson2:decode(Result)};
+            {ok, jsx:decode(Result)};
         {error, ErrorJson} when is_binary(ErrorJson) ->
-            case mochijson2:decode(ErrorJson) of
-                {struct, Error} ->
+            case jsx:decode(ErrorJson) of
+                Error when is_map(Error) ->
                     {error, Error};
                 _ ->
                     {error, ErrorJson}
@@ -136,15 +124,5 @@ exec_js(Ctx, FileName, Js, _Jsonify, HandleRetval, Timeout) when is_binary(FileN
     end.
 
 %% @private
-%priv_dir() ->
-    %% Hacky workaround to handle running from a standard app directory
-    %% and .ez package
-%    case code:priv_dir('erlang-mozjs') of
-%        {error, bad_name} ->
-%            filename:join([filename:dirname(code:which(?MODULE)), "..", "priv"]);
-%        Dir ->
-%            Dir
-%    end.
-
 to_binary(B) when is_binary(B) -> B;
 to_binary(L) when is_list(L) -> list_to_binary(L).
