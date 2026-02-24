@@ -27,8 +27,8 @@ void on_error(JSContext* context, JSErrorReport* report)
 {
     if (!report->isWarning())
     {
-        spidermonkey_state* state =
-            (spidermonkey_state*)JS_GetContextPrivate(context);
+        auto* state =
+            static_cast<spidermonkey_state*>(JS_GetContextPrivate(context));
         /* report->linebuf() returns const char16_t* in mozjs 115+;
            casting to (char*) is undefined behaviour.  Use a safe
            placeholder instead. */
@@ -41,7 +41,7 @@ void on_error(JSContext* context, JSErrorReport* report)
 bool on_branch(JSContext* context)
 {
     bool return_value = true;
-    spidermonkey_state* state = (spidermonkey_state*)JS_GetContextPrivate(context);
+    auto* state = static_cast<spidermonkey_state*>(JS_GetContextPrivate(context));
     state->branch_count++;
 
     if (state->terminate)
@@ -102,7 +102,7 @@ bool js_log(JSContext* cx, unsigned argc, JS::Value* vp)
         FILE* fd = fopen(filename.get(), "a+");
         if (fd)
         {
-            struct tm* tmp;
+            const struct tm* tmp;
             time_t t;
 
             t = time(nullptr);
@@ -158,7 +158,7 @@ char* spidermonkey_state::error_to_json()
         }
     }
 
-    char fmt[] = "{\"lineno\": %d, \"message\": \"%s\", \"source\": \"%s\"}";
+    const char fmt[] = "{\"lineno\": %u, \"message\": \"%s\", \"source\": \"%s\"}";
     size_t size = escaped_source->length() + msg->length() + strlen(fmt);
     char* retval = new char[size];
 
@@ -208,12 +208,12 @@ spidermonkey_vm::spidermonkey_vm(size_t thread_stack, uint32_t heap_size)
     JS::SetWarningReporter(context, on_error);
     JS_AddInterruptCallback(context, on_branch);
     JS_SetContextPrivate(context, state);
-    JS_DefineFunction(context, g, "ejsLog", (JSNative)js_log, 0, 0);
+    JS_DefineFunction(context, g, "ejsLog", js_log, 0, 0);
 }
 
 spidermonkey_vm::~spidermonkey_vm()
 {
-    spidermonkey_state* state = (spidermonkey_state*)JS_GetContextPrivate(this->context);
+    auto* state = static_cast<spidermonkey_state*>(JS_GetContextPrivate(this->context));
     JS_SetContextPrivate(this->context, nullptr);
 
     delete state;
@@ -224,7 +224,7 @@ spidermonkey_vm::~spidermonkey_vm()
 
 void spidermonkey_vm::sm_stop()
 {
-    spidermonkey_state* state = (spidermonkey_state*)JS_GetContextPrivate(this->context);
+    auto* state = static_cast<spidermonkey_state*>(JS_GetContextPrivate(this->context));
     state->terminate = true;
     JS_SetContextPrivate(this->context, state);
 
@@ -253,7 +253,7 @@ bool spidermonkey_vm::sm_eval(const char* filename, size_t filename_length, cons
     if (!script)
     {
         this->check_js_exception();
-        spidermonkey_state* state = (spidermonkey_state*)JS_GetContextPrivate(this->context);
+        auto* state = static_cast<spidermonkey_state*>(JS_GetContextPrivate(this->context));
         if (!state->error)
         {
             /* check_js_exception didn't capture a structured error.
@@ -266,13 +266,12 @@ bool spidermonkey_vm::sm_eval(const char* filename, size_t filename_length, cons
         return false;
     }
 
-    spidermonkey_state* state = (spidermonkey_state*)JS_GetContextPrivate(this->context);
+    auto* state = static_cast<spidermonkey_state*>(JS_GetContextPrivate(this->context));
 
     JS::RootedValue result(this->context);
     bool exec_ok = JS_ExecuteScript(this->context, script, &result);
     if (!exec_ok)
         this->check_js_exception();
-    state = (spidermonkey_state*)JS_GetContextPrivate(this->context);
     if (state->error)
     {
         *output = state->error_to_json();
@@ -318,8 +317,8 @@ void spidermonkey_vm::check_js_exception()
             JSErrorReport* report = JS_ErrorFromException(this->context, exception);
             if (report)
             {
-                spidermonkey_state* state =
-                    (spidermonkey_state*)JS_GetContextPrivate(this->context);
+                auto* state =
+                    static_cast<spidermonkey_state*>(JS_GetContextPrivate(this->context));
                 state->replace_error(report->message().c_str(), report->lineno,
                                      "<exception>");
                 JS_SetContextPrivate(this->context, state);
@@ -337,8 +336,8 @@ void spidermonkey_vm::check_js_exception()
             JS::UniqueChars buf(JS_EncodeStringToUTF8(this->context, str));
             if (buf)
             {
-                spidermonkey_state* state =
-                    (spidermonkey_state*)JS_GetContextPrivate(this->context);
+                auto* state =
+                    static_cast<spidermonkey_state*>(JS_GetContextPrivate(this->context));
                 state->replace_error(buf.get(), 0, "<thrown>");
                 JS_SetContextPrivate(this->context, state);
             }

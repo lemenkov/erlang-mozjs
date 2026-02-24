@@ -34,14 +34,14 @@ static ErlNifFunc nif_funcs[] = {
 static ERL_NIF_TERM mozjs_init(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     (void)argc;
-    mozjs_handle* handle =
-        (mozjs_handle*)enif_alloc_resource(mozjs_RESOURCE, sizeof(mozjs_handle));
-    size_t thread_stack = 0;
+    auto* handle =
+        static_cast<mozjs_handle*>(enif_alloc_resource(mozjs_RESOURCE, sizeof(mozjs_handle)));
+    unsigned int thread_stack = 0;
     uint32_t heap_size = 0;
-    enif_get_uint(env, argv[0], (unsigned int*)&thread_stack);
+    enif_get_uint(env, argv[0], &thread_stack);
     enif_get_uint(env, argv[1], &heap_size);
-    handle->vm =
-        new spidermonkey_vm(thread_stack * (1024 * 1024), heap_size * (1024 * 1024));
+    handle->vm = new spidermonkey_vm(static_cast<size_t>(thread_stack) * (1024 * 1024),
+                                     heap_size * (1024 * 1024));
 
     ERL_NIF_TERM result = enif_make_resource(env, handle);
     enif_release_resource(handle);
@@ -52,10 +52,11 @@ static ERL_NIF_TERM mozjs_init(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
 static ERL_NIF_TERM mozjs_eval(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     (void)argc;
-    mozjs_handle* handle = nullptr;
+    void* handle_ptr = nullptr;
 
-    if (!enif_get_resource(env, argv[0], mozjs_RESOURCE, (void**)&handle))
+    if (!enif_get_resource(env, argv[0], mozjs_RESOURCE, &handle_ptr))
         return enif_make_badarg(env);
+    auto* handle = static_cast<mozjs_handle*>(handle_ptr);
 
     if (handle->vm == nullptr)
         return enif_make_tuple2(env, atom_error, atom_noinit);
@@ -72,21 +73,21 @@ static ERL_NIF_TERM mozjs_eval(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
     enif_get_int(env, argv[3], &handle_retval);
 
     char* output = nullptr;
-    bool retval = handle->vm->sm_eval((const char*)filename.data, filename.size,
-                                      (const char*)code.data, code.size, &output,
+    bool retval = handle->vm->sm_eval(reinterpret_cast<const char*>(filename.data), filename.size,
+                                      reinterpret_cast<const char*>(code.data), code.size, &output,
                                       handle_retval);
 
     if (output)
     {
-        ErlNifBinary result;
-        enif_alloc_binary(strlen(output), &result);
-        memcpy((char*)result.data, output, result.size);
+        ErlNifBinary bin_result;
+        enif_alloc_binary(strlen(output), &bin_result);
+        memcpy(bin_result.data, output, bin_result.size);
         delete[] output;
 
         if (retval)
-            return enif_make_tuple2(env, atom_ok, enif_make_binary(env, &result));
+            return enif_make_tuple2(env, atom_ok, enif_make_binary(env, &bin_result));
         else
-            return enif_make_tuple2(env, atom_error, enif_make_binary(env, &result));
+            return enif_make_tuple2(env, atom_error, enif_make_binary(env, &bin_result));
     }
 
     if (!retval)
@@ -99,10 +100,11 @@ static ERL_NIF_TERM mozjs_eval(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
 static ERL_NIF_TERM mozjs_cancel(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     (void)argc;
-    mozjs_handle* handle = nullptr;
+    void* handle_ptr = nullptr;
 
-    if (!enif_get_resource(env, argv[0], mozjs_RESOURCE, (void**)&handle))
+    if (!enif_get_resource(env, argv[0], mozjs_RESOURCE, &handle_ptr))
         return enif_make_badarg(env);
+    auto* handle = static_cast<mozjs_handle*>(handle_ptr);
 
     if (handle->vm == nullptr)
         return enif_make_tuple2(env, atom_error, atom_noinit);
@@ -115,10 +117,11 @@ static ERL_NIF_TERM mozjs_cancel(ErlNifEnv* env, int argc, const ERL_NIF_TERM ar
 static ERL_NIF_TERM mozjs_stop(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     (void)argc;
-    mozjs_handle* handle = nullptr;
+    void* handle_ptr = nullptr;
 
-    if (!enif_get_resource(env, argv[0], mozjs_RESOURCE, (void**)&handle))
+    if (!enif_get_resource(env, argv[0], mozjs_RESOURCE, &handle_ptr))
         return enif_make_badarg(env);
+    auto* handle = static_cast<mozjs_handle*>(handle_ptr);
 
     if (handle->vm == nullptr)
         return enif_make_tuple2(env, atom_error, atom_noinit);
@@ -133,7 +136,7 @@ static ERL_NIF_TERM mozjs_stop(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv
 static void mozjs_resource_cleanup(ErlNifEnv* env, void* arg)
 {
     (void)env;
-    mozjs_handle* handle = (mozjs_handle*)arg;
+    auto* handle = static_cast<mozjs_handle*>(arg);
     if (handle->vm != nullptr)
     {
         handle->vm->sm_stop();
