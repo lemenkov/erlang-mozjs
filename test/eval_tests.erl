@@ -227,6 +227,8 @@ verify_error({error, #{<<"lineno">> := LineNo, <<"message">> := Msg, <<"source">
     is_number(LineNo), is_binary(Msg), is_binary(Source)
 ->
     true;
+verify_error({error, Reason}) when is_atom(Reason) ->
+    true;
 verify_error(Error) ->
     %% Shouldn't normally happen.
     ?debugFmt("Error: ~p~n", [Error]),
