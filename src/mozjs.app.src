@@ -1,8 +1,13 @@
-% -*- mode: erlang -*-
-{application, mozjs,
- [{description,  "Interface between BEAM and MozJS"},
-  {vsn,          git},
-  {modules,      []},
-  {registered,   []},
-  {applications, [kernel, stdlib]},
-  {mod, {mozjs, []}}]}.
+%% SPDX-FileCopyrightText: 2009-2010 Basho Technologies
+%% SPDX-FileCopyrightText: 2020-2026 Peter Lemenkov <lemenkov@gmail.com>
+%% SPDX-License-Identifier: Apache-2.0
+
+{application, mozjs, [
+    {description, "NIF bindings for Mozilla SpiderMonkey JavaScript engine"},
+    {vsn, git},
+    {modules, []},
+    {registered, []},
+    {applications, [kernel, stdlib]},
+    {licenses, ["Apache-2.0"]},
+    {links, [{"GitHub", "https://github.com/erlang-mozjs/erlang-mozjs"}]}
+]}.
