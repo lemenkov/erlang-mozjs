@@ -33,7 +33,10 @@ jobs:
       - name: Install Packages
         run: |
           sudo apt-get update
-          sudo apt-get install --yes erlang-dev erlang-rebar3 libmozjs-115-dev g++ pkg-config
+          sudo apt-get install --yes erlang-dev erlang-nox libmozjs-115-dev g++ pkg-config
+          wget https://github.com/erlang/rebar3/releases/latest/download/rebar3
+          chmod +x rebar3
+          sudo mv rebar3 /usr/local/bin/
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
